@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>모바일 바코드 스캐너</title>
+    <!-- 가장 안정적인 최신 html5-qrcode CDN 버전 -->
+    <script src="https://unpkg.com"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #f5f5f5; }
+        #reader { width: 100%; max-width: 400px; margin: 20px auto; border: 2px solid #333; border-radius: 8px; overflow: hidden; background: #000; }
+        #result { margin-top: 20px; padding: 15px; font-size: 1.2rem; font-weight: bold; color: #0056b3; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); word-break: break-all; }
+        .btn { padding: 10px 20px; font-size: 1rem; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>바코드 스캐너</h1>
+    <!-- 카메라 권한을 먼저 요청하기 위한 시작 버튼 (모바일 필수 정책 대응) -->
+    <button class="btn" id="start-btn">스캐너 시작</button>
+    <div id="reader" style="display:none;"></div>
+    <div id="result">아래 버튼을 눌러 카메라를 켜주세요.</div>
+
+    <script>
+        let html5QrCode;
+
+        document.getElementById('start-btn').addEventListener('click', function() {
+            document.getElementById('reader').style.display = 'block';
+            this.style.display = 'none';
+            document.getElementById('result').innerText = '카메라 권한 승인 대기 중...';
+
+            html5QrCode = new Html5Qrcode("reader");
+            
+            // 모바일 후면 카메라 최적화 설정
+            const config = { 
+                fps: 15, 
+                qrbox: function(viewfinderWidth, viewfinderHeight) {
+                    // 직사각형 바코드도 잘 잡히도록 가로를 세로보다 길게 설정
+                    return { width: viewfinderWidth * 0.8, height: viewfinderHeight * 0.4 };
+                },
+                aspectRatio: 1.0
+            };
+
+            html5QrCode.start(
+                { facingMode: "environment" }, // 후면 카메라 강제
+                config,
+                (decodedText) => { // 스캔 성공
+                    document.getElementById('result').innerText = `스캔 결과: ${decodedText}`;
+                    if (navigator.vibrate) navigator.vibrate([100, 50, 100]); // 모바일 진동 피드백
+                },
+                (error) => { /* 인식 실패 무시 */ }
+            ).catch((err) => {
+                document.getElementById('result').innerText = `카메라 에러: ${err}\n(반드시 HTTPS 환경이나 localhost에서 실행해야 합니다.)`;
+                document.getElementById('result').style.color = 'red';
+            });
+        });
+    </script>
+</body>
+</html>
