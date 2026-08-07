@@ -1,85 +1,114 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <title>Web MQTT Publisher</title>
-    <!-- MQTT.js CDN 라이브러리 로드 -->
-    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+<meta charset="UTF-8">
+<title>MQTT Publish Test</title>
+
+<!-- mqtt.js -->
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body>
-    <h2>Web MQTT Publisher 테스트</h2>
-    
-    <div>
-        <button onclick="connectMQTT()">1. 브로커 연결</button>
-        <span id="status" style="color: red; font-weight: bold;">연결 안 됨</span>
-    </div>
-    <br>
-    <div>
-        <label>토픽: </label>
-        <input type="text" id="topic" value="test/topic"><br><br>
-        <label>메시지: </label>
-        <input type="text" id="message" value="Hello World!"><br><br>
-        <button onclick="publishMessage()" id="pubBtn" disabled>2. 메시지 발행 (Publish)</button>
-    </div>
 
-    <script>
-        let client = null;
+<div>
+    <button onclick="connectMQTT()">1. 브로커 연결</button>
+    <span id="status" style="color:red;font-weight:bold;">
+        연결 안 됨
+    </span>
+</div>
 
-        // MQTT 브로커 연결 함수
-        function connectMQTT() {
-            // Public 테스트 브로커 (Websocket 프로토콜 사용)
-            // 주의: 실제 서비스에서는 자체 브로커(HiveMQ, Mosquitto 등) 주소를 사용하세요.
-            const brokerUrl = 'wss://://hivemq.com';
-            
-            const options = {
-                clientId: 'web_mqtt_' + Math.random().toString(16).substr(2, 8),
-                clean: true,
-                connectTimeout: 4000
-            };
+<br>
 
-            document.getElementById('status').innerText = '연결 중...';
-            document.getElementById('status').style.color = 'orange';
+<div>
+    <label>토픽</label>
+    <input id="topic" value="test/topic">
 
-            // 브로커 연결 시작
-            client = mqtt.connect(brokerUrl, options);
+    <br><br>
 
-            // 연결 성공 이벤트
-            client.on('connect', () => {
-                document.getElementById('status').innerText = '연결 완료';
-                document.getElementById('status').style.color = 'green';
-                document.getElementById('pubBtn').disabled = false;
-                console.log('MQTT Connected via Websocket');
-            });
+    <label>메시지</label>
+    <input id="message" value="Hello World!">
 
-            // 오류 발생 이벤트
-            client.on('error', (err) => {
-                console.error('Connection error: ', err);
-                document.getElementById('status').innerText = '연결 실패';
-                document.getElementById('status').style.color = 'red';
-            });
+    <br><br>
+
+    <button id="pubBtn" onclick="publishMessage()" disabled>
+        2. 메시지 발행
+    </button>
+</div>
+
+<script>
+let client = null;
+
+function connectMQTT() {
+
+    // HiveMQ Public Broker(WebSocket)
+    const brokerUrl = "wss://broker.hivemq.com:8884/mqtt";
+
+    const options = {
+        clientId: "web_" + Math.random().toString(16).substring(2,10),
+        clean: true,
+        reconnectPeriod: 3000,
+        connectTimeout: 5000
+    };
+
+    document.getElementById("status").innerText = "연결 중...";
+    document.getElementById("status").style.color = "orange";
+
+    client = mqtt.connect(brokerUrl, options);
+
+    client.on("connect", () => {
+
+        console.log("Connected");
+
+        document.getElementById("status").innerText = "연결 완료";
+        document.getElementById("status").style.color = "green";
+        document.getElementById("pubBtn").disabled = false;
+
+    });
+
+    client.on("reconnect", () => {
+        console.log("Reconnecting...");
+    });
+
+    client.on("error", (err) => {
+
+        console.error(err);
+
+        document.getElementById("status").innerText = "연결 실패";
+        document.getElementById("status").style.color = "red";
+    });
+
+    client.on("close", () => {
+
+        document.getElementById("status").innerText = "연결 종료";
+        document.getElementById("status").style.color = "red";
+        document.getElementById("pubBtn").disabled = true;
+
+    });
+}
+
+function publishMessage() {
+
+    if (!client || !client.connected) {
+        alert("먼저 브로커에 연결하세요.");
+        return;
+    }
+
+    const topic = document.getElementById("topic").value;
+    const message = document.getElementById("message").value;
+
+    client.publish(topic, message, { qos: 0 }, (err) => {
+
+        if (err) {
+            console.error(err);
+            alert("발행 실패");
+            return;
         }
 
-        // 메시지 발행 함수
-        function publishMessage() {
-            if (!client || !client.connected) {
-                alert('브로커에 먼저 연결해주세요.');
-                return;
-            }
+        console.log("Published:", topic, message);
+        alert("발행 성공");
+    });
 
-            const topic = document.getElementById('topic').value;
-            const message = document.getElementById('message').value;
+}
+</script>
 
-            // 메시지 전송 (QoS 0 설정)
-            client.publish(topic, message, { qos: 0 }, (err) => {
-                if (err) {
-                    console.error('Publish error:', err);
-                    alert('발행 실패');
-                } else {
-                    console.log(`Published: [${topic}] ${message}`);
-                    alert('메시지 발행 성공!');
-                }
-            });
-        }
-    </script>
 </body>
 </html>
