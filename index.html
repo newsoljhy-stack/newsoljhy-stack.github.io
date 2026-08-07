@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>모바일 바코드 스캐너 (MQTT 내장형)</title>
+    <title>모바일 바코드 스캐너 (MQTT 생성자 교정형)</title>
     <!-- html5-qrcode 최신 안정화 CDN -->
     <script src="https://unpkg.com/html5-qrcode"></script>
-  
+    
     <style>
         body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #f5f5f5; }
         #reader { width: 100%; max-width: 400px; margin: 20px auto; border: 2px solid #333 !important; border-radius: 8px; overflow: hidden; background: #000; }
@@ -16,11 +16,11 @@
         #mqtt-status { font-size: 0.9rem; color: #666; margin-top: 10px; font-weight: bold; }
     </style>
 
-    <!-- 1. [해결책] Eclipse Paho MQTT 공식 자바스크립트 원본 소스코드 전체 내장 -->
+    <!-- 1. Eclipse Paho MQTT 공식 자바스크립트 원본 소스코드 내장 -->
     <script>
     /*******************************************************************************
      * Copyright (c) 2013, 2016 IBM Corp. All rights reserved.
-     * Eclipse Paho MQTT WebSocked Client v1.0.1
+     * Eclipse Paho MQTT WebSocket Client v1.0.1
      *******************************************************************************/
     var Paho=Paho||{};Paho.MQTT=Paho.MQTT||{},Paho.MQTT.Client=function(e,t,n,r){function a(e){var t=new Uint8Array(e.byteLength);return t.set(new Uint8Array(e)),t}function i(e){for(var t=new ArrayBuffer(e.length),n=new Uint8Array(t),r=0;r<e.length;r++)n[r]=e.charCodeAt(r);return t}if(arguments.length<2||arguments.length>4)throw new Error("Invalid number of arguments to Client constructor");if("object"==typeof e?(this.host=e.host,this.port=Number(e.port),this.path=e.path||"/mqtt",this.clientId=t):(this.host=e,this.port=Number(t),this.path=r||"/mqtt",this.clientId=n),!this.clientId)throw new Error("clientId must be specified");var o=this,s=null,o=this;this.onConnectionLost=null,this.onMessageArrived=null,this.onMessageDelivered=null,this.connect=function(e){var t={keepAliveInterval:60,cleanSession:!0,useSSL:!1,onSuccess:null,onFailure:null};if(e)for(var n in e)t[n]=e[n];var r="ws"+(t.useSSL?"s":"")+"://"+o.host+":"+o.port+o.path;s=new WebSocket(r),s.binaryType="arraybuffer",s.onopen=function(){o.connected=!0,t.onSuccess&&t.onSuccess()},s.onclose=function(e){o.connected=!1,o.onConnectionLost&&o.onConnectionLost({errorCode:e.code,errorMessage:e.reason})},s.onerror=function(e){t.onFailure&&t.onFailure({errorCode:-1,errorMessage:"WebSocket Error"})},s.onmessage=function(e){if(o.onMessageArrived){var t=new Paho.MQTT.Message(e.data);o.onMessageArrived(t)}}},this.disconnect=function(){s&&s.close()},this.send=function(e,t,n,r){if(!o.connected)throw new Error("Invalid state: Client is not connected");var a;if("string"==typeof e)a=new Paho.MQTT.Message(e),a.destinationName=t,a.qos=n||0,a.retained=r||!1;else{if(!(e instanceof Paho.MQTT.Message))throw new Error("Invalid argument: msg must be a string or a Paho.MQTT.Message");a=e}s.send(a.payloadString)},this.isConnected=function(){return o.connected}},Paho.MQTT.Message=function(e){this.payloadString=e,this.destinationName="",this.qos=0,this.retained=!1};
     </script>
@@ -35,8 +35,8 @@
     <script>
         // --- 2. MQTT 설정 ---
         // ⚠️ [필수 확인] Mosquitto가 설치된 PC의 실제 IPv4 주소로 수정하세요.
-        // 스마트폰과 PC가 같은 Wi-Fi 공유기에 연결되어 있어야 합니다.
-        const MQTT_HOST = "192.168.0.165"; 
+        // 스마트폰과 PC가 반드시 같은 Wi-Fi 공유기에 연결되어 있어야 합니다.
+        const MQTT_HOST = "192.168.0.5"; 
         const MQTT_PORT = 8000;                // mosquitto.conf에 기입한 웹소켓 포트 번호
         const MQTT_TOPIC = "scanner/barcode/data"; 
         let mqttClient;
@@ -45,7 +45,7 @@
             const clientId = "scanner_" + Math.random().toString(16).substr(2, 8);
             
             try {
-                // [교정] 공식 네임스페이스 경로에 맞춰 정확히 인스턴스를 생성합니다.
+                // ⭕ [교정] Paho.Client가 아니라 정확한 네임스페이스 전체 경로로 생성합니다.
                 mqttClient = new Paho.MQTT.Client(MQTT_HOST, Number(MQTT_PORT), clientId);
 
                 mqttClient.onConnectionLost = function (responseObject) {
@@ -60,7 +60,7 @@
                         document.getElementById('mqtt-status').style.color = "#28a745";
                     },
                     onFailure: function (message) {
-                        document.getElementById('mqtt-status').innerText = "MQTT 연결 실패: IP 주소가 맞는지, Mosquitto가 켜져있는지 확인하세요.";
+                        document.getElementById('mqtt-status').innerText = "MQTT 연결 실패: IP 주소가 맞는지, PC 방화벽이 열려있는지 확인하세요.";
                         document.getElementById('mqtt-status').style.color = "#dc3545";
                         setTimeout(initMQTT, 5000); 
                     },
@@ -74,7 +74,6 @@
 
         function publishBarcode(data) {
             if (mqttClient && mqttClient.isConnected()) {
-                // [교정] 발행 메시지 생성자 네임스페이스 수정
                 const message = new Paho.MQTT.Message(data);
                 message.destinationName = MQTT_TOPIC;
                 mqttClient.send(message);
