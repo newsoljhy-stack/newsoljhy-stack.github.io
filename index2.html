@@ -43,8 +43,8 @@ let client = null;
 // MQTT 연결을 페이지 로드 시 즉시 실행
 function connectMQTT() {
     if (client && client.connected) return;
-
-    const brokerUrl = "wss://://hivemq.com";
+    
+    const brokerUrl = "wss://broker.hivemq.com:8884/mqtt";
     const options = {
         clientId: "web_bc_" + Math.random().toString(16).substring(2,10),
         clean: true,
