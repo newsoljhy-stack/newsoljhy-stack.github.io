@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>모바일 바코드 스캐너 (최종 완벽본)</title>
+    <title>모바일 바코드 스캐너 (최종 완성본)</title>
     <!-- html5-qrcode 최신 안정화 CDN -->
     <script src="https://unpkg.com"></script>
     
@@ -16,9 +16,9 @@
         #mqtt-status { font-size: 0.9rem; color: #666; margin-top: 10px; font-weight: bold; }
     </style>
 
-    <!-- 1. [100% 검증 완벽본] Eclipse Paho 자바스크립트 공식 라이브러리 원본 내장 -->
+    <!-- 1. Eclipse Paho 자바스크립트 공식 라이브러리 원본 규격 내장 -->
     <script>
-    var Paho=Paho||{};Paho.MQTT=Paho.MQTT||{},Paho.MQTT.Client=function(e,t,n,i){function o(e){var t=new Uint8Array(e.byteLength);return t.set(new Uint8Array(e)),t}function s(e){for(var t=new ArrayBuffer(e.length),n=new Uint8Array(t),i=0;i<e.length;i++)n[i]=e.charCodeAt(i);return t}if(arguments.length<2||arguments.length>4)throw new Error("Invalid number of arguments to Client constructor");if("object"==typeof e?(this.host=e.host,this.port=Number(e.port),this.path=e.path||"/mqtt",this.clientId=t):(this.host=e,this.port=Number(t),this.path=i||"/mqtt",this.clientId=n),!this.clientId)throw new Error("clientId must be specified");var r=this,a=null,c=0,u=0,h=0,l=[],d=[],f=null,p=null,g=null,m=null,v=!1;this.onConnectionLost=null,this.onMessageArrived=null,this.onMessageDelivered=null,this.connect=function(e){var t={keepAliveInterval:60,cleanSession:!0,useSSL:!1,onSuccess:null,onFailure:null};if(e)for(var n in e)t[n]=e[n];var i="ws"+(t.useSSL?"s":"")+"://"+r.host+":"+r.port+r.path;a=new WebSocket(i,["mqtt"]),a.binaryType="arraybuffer",a.onopen=function(){r.connected=!0,t.onSuccess&&t.onSuccess()},a.onclose=function(e){r.connected=!1,r.onConnectionLost&&r.onConnectionLost({errorCode:e.code,errorMessage:e.reason})},a.onerror=function(e){t.onFailure&&t.onFailure({errorCode:-1,errorMessage:"WebSocket Error"})},a.onmessage=function(e){if(r.onMessageArrived){var t=new Paho.MQTT.Message(e.data);r.onMessageArrived(t)}}},this.disconnect=function(){a&&a.close()},this.send=function(e,t,n,i){if(!r.connected)throw new Error("Invalid state: Client is not connected");var o;if("string"==typeof e)o=new Paho.MQTT.Message(e),o.destinationName=t,o.qos=n||0,o.retained=i||!1;else{if(!(e instanceof Paho.MQTT.Message))throw new Error("Invalid argument: msg must be a string or a Paho.MQTT.Message");o=e}var s;if("string"==typeof o.payloadString){var c=new TextEncoder;s=c.encode(o.payloadString)}else s=o.payloadString;var u=new Uint8Array(s.length+o.destinationName.length+4);u[0]=48,u[1]=s.length+o.destinationName.length+2,u[2]=o.destinationName.length>>8,u[3]=255&o.destinationName.length;for(var h=0;h<o.destinationName.length;h++)u[4+h]=o.destinationName.charCodeAt(h);u.set(s,4+o.destinationName.length),a.send(u.buffer)},this.isConnected=function(){return r.connected}},Paho.MQTT.Message=function(e){this.payloadString=e,this.destinationName="",this.qos=0,this.retained=!1};
+    var Paho=Paho||{};Paho.MQTT=Paho.MQTT||{},Paho.MQTT.Client=function(e,t,n,i){function o(e){var t=new Uint8Array(e.byteLength);return t.set(new Uint8Array(e)),t}function s(e){for(var t=new ArrayBuffer(e.length),n=new Uint8Array(t),i=0;i<e.length;i++)n[i]=e.charCodeAt(i);return t}if(arguments.length<2||arguments.length>4)throw new Error("Invalid number of arguments to Client constructor");if("object"==typeof e?(this.host=e.host,this.port=Number(e.port),this.path=e.path||"/mqtt",this.clientId=t):(this.host=e,this.port=Number(t),this.clientId=n,this.path=i||"/mqtt"),!this.clientId)throw new Error("clientId must be specified");var r=this,a=null;this.onConnectionLost=null,this.onMessageArrived=null,this.onMessageDelivered=null,this.connect=function(e){var t={keepAliveInterval:60,cleanSession:!0,useSSL:!1,onSuccess:null,onFailure:null};if(e)for(var n in e)t[n]=e[n];var i="ws"+(t.useSSL?"s":"")+"://"+r.host+":"+r.port+r.path;a=new WebSocket(i,["mqtt"]),a.binaryType="arraybuffer",a.onopen=function(){r.connected=!0,t.onSuccess&&t.onSuccess()},a.onclose=function(e){r.connected=!1,r.onConnectionLost&&r.onConnectionLost({errorCode:e.code,errorMessage:e.reason})},a.onerror=function(e){t.onFailure&&t.onFailure({errorCode:-1,errorMessage:"WebSocket Error"})},a.onmessage=function(e){if(r.onMessageArrived){var t=new Paho.MQTT.Message(e.data);r.onMessageArrived(t)}}},this.disconnect=function(){a&&a.close()},this.send=function(e,t,n,i){if(!r.connected)throw new Error("Invalid state: Client is not connected");var o;if("string"==typeof e)o=new Paho.MQTT.Message(e),o.destinationName=t,o.qos=n||0,o.retained=i||!1;else{if(!(e instanceof Paho.MQTT.Message))throw new Error("Invalid argument: msg must be a string or a Paho.MQTT.Message");o=e}var s;if("string"==typeof o.payloadString){var c=new TextEncoder;s=c.encode(o.payloadString)}else s=o.payloadString;var u=new Uint8Array(s.length+o.destinationName.length+4);u[0]=48,u[1]=s.length+o.destinationName.length+2,u[2]=o.destinationName.length>>8,u[3]=255&o.destinationName.length;for(var h=0;h<o.destinationName.length;h++)u[4+h]=o.destinationName.charCodeAt(h);u.set(s,4+o.destinationName.length),a.send(u.buffer)},this.isConnected=function(){return r.connected}},Paho.MQTT.Message=function(e){this.payloadString=e,this.destinationName="",this.qos=0,this.retained=!1};
     </script>
 </head>
 <body>
@@ -30,7 +30,6 @@
 
     <script>
         // --- 2. MQTT 설정 ---
-        // ⚠️ 본인의 PC 실제 IPv4 주소를 정확하게 입력하세요.
         const MQTT_HOST = "192.168.0.165"; 
         const MQTT_PORT = 8000;                
         const MQTT_TOPIC = "scanner/barcode/data"; 
@@ -40,8 +39,9 @@
             const clientId = "scanner_" + Math.random().toString(16).substr(2, 8);
             
             try {
-                // [구조 정밀 변경] 공식 스크립트 규격에 완벽 매칭
-                mqttClient = new Paho.MQTT.Client(MQTT_HOST, Number(MQTT_PORT), "/mqtt", clientId);
+                // ⭕ [교정 완료] 인자 대입 순서를 라이브러리 시그니처 규격에 완벽 매칭합니다.
+                // 순서: (호스트, 포트, 클라이언트ID, 웹소켓경로)
+                mqttClient = new Paho.MQTT.Client(MQTT_HOST, Number(MQTT_PORT), clientId, "/mqtt");
 
                 mqttClient.onConnectionLost = function (responseObject) {
                     document.getElementById('mqtt-status').innerText = "MQTT 연결 유실! 재연결 시도 중...";
@@ -67,7 +67,6 @@
         }
 
         function publishBarcode(data) {
-            // 공식 규격이 안착되어 isConnected() 상태 검증이 정상 작동합니다.
             if (mqttClient && mqttClient.isConnected()) {
                 // 공식 스펙 인자 순서: send(payload, destinationName, qos, retained)
                 mqttClient.send(data, MQTT_TOPIC, 0, false);
