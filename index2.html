@@ -1,120 +1,184 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>모바일 바코드 스캐너 & MQTT 발행</title>
-    <script src="https://unpkg.com"></script>
-    <script src="https://unpkg.com"></script>
-    <style>
-        body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #f5f5f5; }
-        #reader { width: 100%; max-width: 400px; margin: 20px auto; border: 2px solid #333 !important; border-radius: 8px; overflow: hidden; background: #000; }
-        #reader button { padding: 12px 24px; font-size: 1.1rem; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 15px 0; font-weight: bold; }
-        #reader select { padding: 8px; margin: 5px; border-radius: 4px; }
-        .config-box { max-width: 400px; margin: 0 auto 20px auto; padding: 15px; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: left; }
-        .config-item { margin-bottom: 10px; display: flex; align-items: center; }
-        .config-item label { width: 80px; font-weight: bold; font-size: 0.9rem; }
-        .config-item input { flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
-        #status-container { text-align: center; margin-bottom: 10px; font-weight: bold; }
-        #result { margin-top: 20px; padding: 15px; font-size: 1.2rem; font-weight: bold; color: #555; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); word-break: break-all; }
-        .success-text { color: #28a745; }
-    </style>
+<meta charset="UTF-8">
+<title>Barcode Scanner MQTT Publisher</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<!-- Html5 QR -->
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<!-- mqtt.js -->
+<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+<style>
+body{
+    font-family:sans-serif;
+    background:#f5f5f5;
+    text-align:center;
+    padding:20px;
+}
+
+#reader{
+    width:100%;
+    max-width:420px;
+    margin:auto;
+    border:2px solid #444;
+    border-radius:10px;
+    overflow:hidden;
+}
+
+#result{
+    margin-top:20px;
+    font-size:20px;
+    font-weight:bold;
+    color:#2b7a2b;
+    word-break:break-all;
+}
+
+#mqtt-status{
+    margin:15px;
+    font-weight:bold;
+    color:red;
+}
+
+button{
+    padding:10px 20px;
+    font-size:16px;
+    cursor:pointer;
+}
+</style>
+
 </head>
 <body>
 
-    <h1>바코드 MQTT 발행기</h1>
-    
-    <div class="config-box">
-        <div id="status-container">
-            MQTT 상태: <span id="status" style="color:red;">연결 대기 중...</span>
-        </div>
-        <div class="config-item">
-            <label for="topic">발행 토픽</label>
-            <input id="topic" value="myunique/test/topic">
-        </div>
-    </div>
-    
-    <div id="reader"></div>
-    <div id="result">카메라 권한 허용 후 시작해 주세요.</div>
+<h2>📷 Barcode Scanner MQTT Publisher</h2>
+
+<div id="mqtt-status">
+MQTT 연결 안됨
+</div>
+
+<div id="reader"></div>
+
+<div id="result">
+바코드를 스캔하세요.
+</div>
 
 <script>
-let client = null;
 
-// MQTT 연결을 페이지 로드 시 즉시 실행
-function connectMQTT() {
-    if (client && client.connected) return;
-    
-    const brokerUrl = "wss://broker.hivemq.com:8884/mqtt";
-    const options = {
-        clientId: "web_bc_" + Math.random().toString(16).substring(2,10),
-        clean: true,
-        reconnectPeriod: 3000,
-        connectTimeout: 5000
-    };
+//============================
+// MQTT 설정
+//============================
+const brokerUrl = "wss://broker.hivemq.com:8884/mqtt";
 
-    const statusEl = document.getElementById("status");
-    statusEl.innerText = "연결 중...";
-    statusEl.style.color = "orange";
+const MQTT_TOPIC = "myunique/test/topic";
 
-    client = mqtt.connect(brokerUrl, options);
+let client;
 
-    client.on("connect", () => {
-        statusEl.innerText = "연결 완료";
-        statusEl.style.color = "green";
+function connectMQTT(){
+
+    client = mqtt.connect(brokerUrl,{
+        clientId:"web_pub_"+Math.random().toString(16).substring(2,10),
+        clean:true,
+        reconnectPeriod:3000,
+        connectTimeout:5000
     });
 
-    client.on("error", (err) => {
+    client.on("connect",()=>{
+
+        document.getElementById("mqtt-status").innerHTML="MQTT 연결 완료";
+        document.getElementById("mqtt-status").style.color="green";
+
+    });
+
+    client.on("error",(err)=>{
+
         console.error(err);
-        statusEl.innerText = "연결 실패 (네트워크 확인)";
-        statusEl.style.color = "red";
+
+        document.getElementById("mqtt-status").innerHTML="MQTT 연결 실패";
+        document.getElementById("mqtt-status").style.color="red";
+
     });
 
-    client.on("close", () => {
-        statusEl.innerText = "연결 종료";
-        statusEl.style.color = "red";
-    });
 }
 
-function publishMessage(scannedData) {
-    if (!client || !client.connected) {
-        console.warn("MQTT 미연결 상태");
+
+//============================
+// Publish
+//============================
+function publishBarcode(barcode){
+
+    if(!client || !client.connected){
+        alert("MQTT가 연결되지 않았습니다.");
         return;
     }
-    const topic = document.getElementById("topic").value;
-    client.publish(topic, scannedData, { qos: 0 });
-}
 
-document.addEventListener("DOMContentLoaded", function() {
-    // 1. MQTT 연결 시작
-    connectMQTT();
+    client.publish(
+        "myunique/test/topic",
+        barcode,
+        {qos:0},
+        (err)=>{
 
-    // 2. 스캐너 설정
-    const html5QrcodeScanner = new Html5QrcodeScanner(
-        "reader", 
-        { 
-            fps: 15, 
-            qrbox: function(viewfinderWidth, viewfinderHeight) {
-                const boxWidth = Math.floor(viewfinderWidth * 0.7);
-                return { width: boxWidth, height: Math.floor(boxWidth * 0.5) };
-            }, 
-            aspectRatio: 1.333334,
-            rememberLastUsedCamera: true,
-            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
-        },
-        /* verbose= */ false
+            if(err){
+                console.error(err);
+                return;
+            }
+
+            console.log("Publish:",barcode);
+
+        }
     );
 
-    function onScanSuccess(decodedText, decodedResult) {
-        document.getElementById('result').innerHTML = `스캔 데이터: <span class="success-text">${decodedText}</span>`;
-        if (navigator.vibrate) navigator.vibrate(100);
-        publishMessage(decodedText);
-    }
+}
 
-    function onScanFailure(error) {}
 
-    // 3. 스캐너 렌더링
-    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-});
+//============================
+// Barcode Scanner
+//============================
+function startScanner(){
+
+    const scanner=new Html5QrcodeScanner(
+        "reader",
+        {
+            fps:10,
+            qrbox:{width:280,height:140},
+            aspectRatio:1.0,
+            rememberLastUsedCamera:true
+        },
+        false
+    );
+
+    scanner.render(
+
+    function(decodedText){
+
+        document.getElementById("result").innerHTML=
+            decodedText;
+
+        publishBarcode(decodedText);
+
+    },
+
+    function(error){}
+    );
+
+}
+
+
+
+//============================
+// 시작
+//============================
+window.onload=function(){
+
+    connectMQTT();
+
+    startScanner();
+
+};
+
 </script>
+
 </body>
 </html>
