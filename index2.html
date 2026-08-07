@@ -3,75 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>모바일 바코드 스캐너</title>
-    <!-- html5-qrcode 최신 안정화 CDN -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <title>HTML5 웹 바코드 스캐너</title>
+    <!-- 고성능 오픈소스 바코드 스캔 라이브러리 로드 -->
+    <script src="https://unpkg.com"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #f5f5f5; }
-        
-        /* 스캐너 박스 디자인 커스텀 (내부 기본 UI 깔끔하게 정리) */
-        #reader { width: 100%; max-width: 400px; margin: 20px auto; border: 2px solid #333 !important; border-radius: 8px; overflow: hidden; background: #000; }
-        #reader button { padding: 10px 20px; font-size: 1rem; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px 0; }
-        #reader select { padding: 8px; margin: 5px; border-radius: 4px; }
-        
-        /* 결과창 디자인 */
-        #result { margin-top: 20px; padding: 15px; font-size: 1.2rem; font-weight: bold; color: #555; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); word-break: break-all; }
-        .success-text { color: #28a745; }
+        body { font-family: sans-serif; text-align: center; margin: 20px; }
+        #reader { width: 100%; max-width: 500px; margin: 0 auto; border: 2px solid #ccc; }
+        #result { margin-top: 20px; font-size: 1.2rem; font-weight: bold; color: blue; }
     </style>
 </head>
 <body>
 
-    <h1>바코드 스캐너2</h1>
-    
-    <!-- 라이브러리가 UI를 직접 제어하는 영역 -->
+    <h1>웹 바코드 스캐너</h1>
+    <!-- 카메라 영상이 표시될 영역 -->
     <div id="reader"></div>
-    
-    <!-- 스캔 결과만 따로 보여주는 독립된 영역 -->
-    <div id="result">카메라 시작 버튼을 눌러주세요.</div>
+    <!-- 스캔된 결과가 출력될 영역 -->
+    <div id="result">바코드를 스캔하세요.</div>
 
-<script>
-// 문서 로드가 완료된 후 스캐너 초기화
-document.addEventListener("DOMContentLoaded", function() {
-    
-    // Html5QrcodeScanner는 내부에서 카메라 로딩 상태 UI를 직접 완벽하게 관리합니다.
-    const html5QrcodeScanner = new Html5QrcodeScanner(
-        "reader", 
-        { 
-            fps: 10, 
-            qrbox: { width: 280, height: 140 }, // 직사각형 바코드 최적화 크기
-            aspectRatio: 1.0,
-            rememberLastUsedCamera: true, // 마지막으로 사용한 후면 카메라 기억
-            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA] // 카메라 스캔만 활성화 (파일 업로드 제외)
-        },
-        /* verbose= */ false
-    );
-
-    // 스캔 성공 시 콜백 함수
-    function onScanSuccess(decodedText, decodedResult) {
-        const resultDiv = document.getElementById('result');
-        resultDiv.innerHTML = `스캔 결과: <span class="success-text">${decodedText}</span>`;
-        
-        // 모바일 진동 피드백
-        if (navigator.vibrate) {
-            navigator.vibrate(100);
+    <script>
+        // 바코드 스캔 성공 시 실행될 콜백 함수
+        function onScanSuccess(decodedText, decodedResult) {
+            // 스캔된 텍스트 화면에 표시
+            document.getElementById('result').innerText = `스캔 성공: ${decodedText}`;
+            
+            // [참고] 이곳에 서버 DB로 데이터를 전송하는 Ajax/Fetch 코드를 작성합니다.
+            // example: fetch('/api/inventory', { method: 'POST', body: JSON.stringify({ barcode: decodedText }) });
+            
+            // 진동 피드백 (스마트폰 기기 지원 시)
+            if (navigator.vibrate) navigator.vibrate(200);
         }
-    }
 
-    // 스캔 실패 시 콜백 함수 (매 프레임 호출되므로 비워둠)
-    function onScanFailure(error) {
-        // 무시 시 가부하 방지
-    }
+        // 바코드 스캔 실패 시 (매 프레임마다 인식 실패할 때도 호출되므로 보통 비워둠)
+        function onScanFailure(error) {
+            // console.warn(`스캔 실패 = ${error}`);
+        }
 
-    // 스캐너 렌더링 (UI가 브라우저 내장 상태와 완전히 동기화되어 그려짐)
-    html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-    
-    // 최초 실행 시 안내 문구 변경
-    setTimeout(() => {
-        const resultDiv = document.getElementById('result');
-        // 라이브러리가 렌더링되면서 자체 문구를 띄우므로 아래 문구로 대기 유도
-        resultDiv.innerText = "상단 스캐너 화면의 안내에 따라주세요.";
-    }, 100);
-});
-</script>
+        // 스캐너 설정 및 구동
+        const html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", 
+            { 
+                fps: 10, // 초당 프레임 수
+                qrbox: { width: 250, height: 150 }, // 스캔 가이드 박스 크기
+                aspectRatio: 1.0
+            },
+            /* verbose= */ false
+        );
+        
+        html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+    </script>
 </body>
 </html>
