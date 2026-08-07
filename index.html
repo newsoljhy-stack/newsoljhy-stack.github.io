@@ -48,6 +48,10 @@
                 // ⭕ [교정] Paho.Client가 아니라 정확한 네임스페이스 전체 경로로 생성합니다.
                 mqttClient = new Paho.MQTT.Client(MQTT_HOST, Number(MQTT_PORT), clientId);
 
+                // --- 💡 [이 줄을 새로 추가해 주세요] ---
+                // 웹소켓 통신 경로를 명시적으로 지정하여 프로토콜 에러를 방지합니다.
+                mqttClient.path = "/mqtt"; 
+
                 mqttClient.onConnectionLost = function (responseObject) {
                     document.getElementById('mqtt-status').innerText = "MQTT 연결 유실! 재연결 시도 중...";
                     document.getElementById('mqtt-status').style.color = "#dc3545";
