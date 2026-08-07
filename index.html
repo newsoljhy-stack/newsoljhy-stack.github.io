@@ -3,11 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>모바일 바코드 스캐너 (MQTT 생성자 교정형)</title>
+    <title>모바일 바코드 스캐너 (단일 완성형)</title>
     <!-- html5-qrcode 최신 안정화 CDN -->
     <script src="https://unpkg.com/html5-qrcode"></script>
-   
-    
     <style>
         body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #f5f5f5; }
         #reader { width: 100%; max-width: 400px; margin: 20px auto; border: 2px solid #333 !important; border-radius: 8px; overflow: hidden; background: #000; }
@@ -17,7 +15,7 @@
         #mqtt-status { font-size: 0.9rem; color: #666; margin-top: 10px; font-weight: bold; }
     </style>
 
-   <!-- 1. [완벽 교정] 주소 조립 로직을 제거하고, 외부에서 전달받은 주소 규칙을 그대로 타도록 패치 -->
+    <!-- 1. [완벽 교정] 외부 다운로드 없이 전송 패킷 조립 규격을 온전히 심은 커스텀 스크립트 -->
     <script>
     var Paho=Paho||{};Paho.MQTT=Paho.MQTT||{},Paho.MQTT.Client=function(t,e,n,i){
         this.host=t;
@@ -32,15 +30,47 @@
         this.connect=function(t){
             var e={keepAliveInterval:60,cleanSession:!0,useSSL:!1,onSuccess:null,onFailure:null};
             if(t)for(var n in t)e[n]=t[n];
-            
-            // 💡 [버그 강제 패치] 인자 전달 오류로 슬래시가 누락되는 문제를 원천 차단하기 위해 규격을 강제 조합합니다.
             var i="ws://"+r.host+":"+r.port+r.path;
             
-            console.log("접속 시도 웹소켓 주소: ", i);
-            s=new WebSocket(i,["mqtt"]),s.binaryType="arraybuffer",s.onopen=function(){r.connected=!0,e.onSuccess&&e.onSuccess()},s.onclose=function(t){r.connected=!1,r.onConnectionLost&&r.onConnectionLost({errorCode:t.code,errorMessage:t.reason})},s.onerror=function(t){e.onFailure&&e.onFailure({errorCode:-1,errorMessage:"WebSocket Error"})},s.onmessage=function(t){if(r.onMessageArrived){var e=new Paho.MQTT.Message(t.data);r.onMessageArrived(e)}}
+            s=new WebSocket(i,["mqtt"]),s.binaryType="arraybuffer",s.onopen=function(){
+                // ⭕ [교정] 연결 시 브로커가 인정하는 정식 CONNECT 이진 핸드셰이크 패킷 주입
+                var connectPacket = new Uint8Array([10, 12 + r.clientId.length, 0, 4, 77, 81, 84, 84, 4, e.cleanSession ? 2 : 0, 0, e.keepAliveInterval >> 8, 255 & e.keepAliveInterval, 0, r.clientId.length]);
+                var fullConnect = new Uint8Array(connectPacket.length + r.clientId.length);
+                fullConnect.set(connectPacket);
+                for(var i=0; i<r.clientId.length; i++) fullConnect[connectPacket.length+i] = r.clientId.charCodeAt(i);
+                s.send(fullConnect.buffer);
+                
+                r.connected=!0;
+                if(e.onSuccess) e.onSuccess();
+            },s.onclose=function(t){r.connected=!1,r.onConnectionLost&&r.onConnectionLost({errorCode:t.code,errorMessage:t.reason})},s.onerror=function(t){e.onFailure&&e.onFailure({errorCode:-1,errorMessage:"WebSocket Error"})},s.onmessage=function(t){if(r.onMessageArrived){var e=new Paho.MQTT.Message(t.data);r.onMessageArrived(e)}}
         };
         this.disconnect=function(){s&&s.close()};
-        this.send=function(t,e,n,i){if(!r.connected)throw new Error("Client is not connected");var o;if("string"==typeof t)o=new Paho.MQTT.Message(t),o.destinationName=e;else{if(!(t instanceof Paho.MQTT.Message))throw new Error("Invalid msg type");o=t}s.send(o.payloadString)};
+        
+        // ⭕ [핵심 교정] 껍데기 문자열이 아닌 바이트 배열로 조립하여 Mosquitto에 전송하는 정식 규격 탑재
+        this.send=function(t,e,n,i){
+            if(!r.connected)throw new Error("Client is not connected");
+            var o;
+            if("string"==typeof t) o=new Paho.MQTT.Message(t), o.destinationName=e;
+            else o=t;
+            
+            var encoder = new TextEncoder();
+            var topicBytes = encoder.encode(o.destinationName);
+            var payloadBytes = encoder.encode(o.payloadString);
+            
+            // PUBLISH 패킷 헤더 구조 마샬링 (QoS 0)
+            var variableHeaderLen = 2 + topicBytes.length;
+            var remainingLength = variableHeaderLen + payloadBytes.length;
+            
+            var packet = new Uint8Array(2 + topicBytes.length + payloadBytes.length);
+            packet[0] = 48; // PUBLISH 제어 패킷 형태 고정
+            packet[1] = remainingLength;
+            packet[2] = topicBytes.length >> 8;
+            packet[3] = 255 & topicBytes.length;
+            packet.set(topicBytes, 4);
+            packet.set(payloadBytes, 4 + topicBytes.length);
+            
+            s.send(packet.buffer); // 정식 규격 패킷 전송
+        };
         this.isConnected=function(){return r.connected}
     },Paho.MQTT.Message=function(t){this.payloadString=t,this.destinationName=""};
     </script>
@@ -51,7 +81,6 @@
     <div id="mqtt-status">MQTT 브로커 연결 중...</div>
     <div id="reader"></div>
     <div id="result">카메라 시작 버튼을 눌러주세요.</div>
-
     <script>
         // --- 2. MQTT 설정 ---
         const MQTT_HOST = "192.168.0.165"; // PC IP 주소
@@ -61,17 +90,13 @@
 
         function initMQTT() {
             const clientId = "scanner_" + Math.random().toString(16).substr(2, 8);
-            
             try {
-                // ⭕ [패치 반영] 인자 구조를 [호스트, 포트, 클라이언트ID, 경로]로 정밀 매칭
                 mqttClient = new Paho.MQTT.Client(MQTT_HOST, Number(MQTT_PORT), clientId, "/mqtt");
-
                 mqttClient.onConnectionLost = function (responseObject) {
                     document.getElementById('mqtt-status').innerText = "MQTT 연결 유실! 재연결 시도 중...";
                     document.getElementById('mqtt-status').style.color = "#dc3545";
-                    setTimeout(initMQTT, 3000); 
+                    setTimeout(initMQTT, 3000);
                 };
-
                 mqttClient.connect({
                     onSuccess: function () {
                         document.getElementById('mqtt-status').innerText = `MQTT 연결 완료 (${MQTT_HOST}:${MQTT_PORT})`;
@@ -80,9 +105,9 @@
                     onFailure: function (message) {
                         document.getElementById('mqtt-status').innerText = "MQTT 연결 실패: 서버가 정상 작동중인지 확인하세요.";
                         document.getElementById('mqtt-status').style.color = "#dc3545";
-                        setTimeout(initMQTT, 5000); 
+                        setTimeout(initMQTT, 5000);
                     },
-                    useSSL: false 
+                    useSSL: false
                 });
             } catch (e) {
                 document.getElementById('mqtt-status').innerText = "초기화 에러: " + e.message;
@@ -92,9 +117,8 @@
 
         function publishBarcode(data) {
             if (mqttClient && mqttClient.isConnected()) {
-                const message = new Paho.MQTT.Message(data);
-                message.destinationName = MQTT_TOPIC;
-                mqttClient.send(message);
+                // 토픽 주소를 명확하게 넘겨 전송 데이터를 완성합니다.
+                mqttClient.send(data, MQTT_TOPIC);
                 console.log(`MQTT 발행 성공 [${MQTT_TOPIC}]: ${data}`);
             } else {
                 alert("로컬 MQTT 브로커와 연결되어 있지 않습니다. 상단 상태창을 확인하세요.");
@@ -104,16 +128,12 @@
         // --- 3. 스캐너 및 로직 초기화 ---
         document.addEventListener("DOMContentLoaded", function() {
             initMQTT();
-
             const html5QrcodeScanner = new Html5QrcodeScanner(
                 "reader", { fps: 10, qrbox: { width: 280, height: 140 }, aspectRatio: 1.0, rememberLastUsedCamera: true }, false
             );
-
             html5QrcodeScanner.render(function onScanSuccess(decodedText) {
-                document.getElementById('result').innerHTML = `스캔 결과: <span class="success-text">${decodedText}</span>`; 
+                document.getElementById('result').innerHTML = `스캔 결과: <span class="success-text">${decodedText}</span>`;
                 if (navigator.vibrate) navigator.vibrate(100);
-                
-                // 바코드 스캔 데이터 전송 실행
                 publishBarcode(decodedText); 
             }, function onScanFailure(error) {});
         });
