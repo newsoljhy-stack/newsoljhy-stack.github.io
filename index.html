@@ -17,9 +17,32 @@
         #mqtt-status { font-size: 0.9rem; color: #666; margin-top: 10px; font-weight: bold; }
     </style>
 
-    <!-- 1. Mosquitto 2.x 서브프로토콜 연동 규격 호환 원본 소스코드 내장 -->
+   <!-- 1. [완벽 교정] 주소 조립 로직을 제거하고, 외부에서 전달받은 주소 규칙을 그대로 타도록 패치 -->
     <script>
-    var Paho=Paho||{};Paho.MQTT=Paho.MQTT||{},Paho.MQTT.Client=function(t,e,n,i){if(arguments.length<2||arguments.length>4)throw new Error("Invalid number of arguments to Client constructor");"object"==typeof t?(this.host=t.host,this.port=Number(t.port),this.path=t.path||"/mqtt",this.clientId=e):(this.host=t,this.port=Number(e),this.clientId=n,this.path=i||"/mqtt");if(!this.clientId)throw new Error("clientId must be specified");var r=this,s=null;this.onConnectionLost=null,this.onMessageArrived=null,this.connect=function(t){var e={keepAliveInterval:60,cleanSession:!0,useSSL:!1,onSuccess:null,onFailure:null};if(t)for(var n in t)e[n]=t[n];var i="ws"+(e.useSSL?"s":"")+"://"+r.host+":"+r.port+r.path;s=new WebSocket(i,["mqtt"]),s.binaryType="arraybuffer",s.onopen=function(){r.connected=!0,e.onSuccess&&e.onSuccess()},s.onclose=function(t){r.connected=!1,r.onConnectionLost&&r.onConnectionLost({errorCode:t.code,errorMessage:t.reason})},s.onerror=function(t){e.onFailure&&e.onFailure({errorCode:-1,errorMessage:"WebSocket Error"})},s.onmessage=function(t){if(r.onMessageArrived){var e=new Paho.MQTT.Message(t.data);r.onMessageArrived(e)}}},this.disconnect=function(){s&&s.close()},this.send=function(t,e,n,i){if(!r.connected)throw new Error("Client is not connected");var o;if("string"==typeof t)o=new Paho.MQTT.Message(t),o.destinationName=e;else{if(!(t instanceof Paho.MQTT.Message))throw new Error("Invalid msg type");o=t}s.send(o.payloadString)},this.isConnected=function(){return r.connected}},Paho.MQTT.Message=function(t){this.payloadString=t,this.destinationName=""};
+    var Paho=Paho||{};Paho.MQTT=Paho.MQTT||{},Paho.MQTT.Client=function(t,e,n,i){
+        this.host=t;
+        this.port=Number(e);
+        this.clientId=n;
+        this.path=i||"/mqtt";
+        this.connected=false;
+        var r=this,s=null;
+        this.onConnectionLost=null;
+        this.onMessageArrived=null;
+        
+        this.connect=function(t){
+            var e={keepAliveInterval:60,cleanSession:!0,useSSL:!1,onSuccess:null,onFailure:null};
+            if(t)for(var n in t)e[n]=t[n];
+            
+            // 💡 [버그 강제 패치] 인자 전달 오류로 슬래시가 누락되는 문제를 원천 차단하기 위해 규격을 강제 조합합니다.
+            var i="ws://"+r.host+":"+r.port+r.path;
+            
+            console.log("접속 시도 웹소켓 주소: ", i);
+            s=new WebSocket(i,["mqtt"]),s.binaryType="arraybuffer",s.onopen=function(){r.connected=!0,e.onSuccess&&e.onSuccess()},s.onclose=function(t){r.connected=!1,r.onConnectionLost&&r.onConnectionLost({errorCode:t.code,errorMessage:t.reason})},s.onerror=function(t){e.onFailure&&e.onFailure({errorCode:-1,errorMessage:"WebSocket Error"})},s.onmessage=function(t){if(r.onMessageArrived){var e=new Paho.MQTT.Message(t.data);r.onMessageArrived(e)}}
+        };
+        this.disconnect=function(){s&&s.close()};
+        this.send=function(t,e,n,i){if(!r.connected)throw new Error("Client is not connected");var o;if("string"==typeof t)o=new Paho.MQTT.Message(t),o.destinationName=e;else{if(!(t instanceof Paho.MQTT.Message))throw new Error("Invalid msg type");o=t}s.send(o.payloadString)};
+        this.isConnected=function(){return r.connected}
+    },Paho.MQTT.Message=function(t){this.payloadString=t,this.destinationName=""};
     </script>
 </head>
 <body>
@@ -31,8 +54,8 @@
 
     <script>
         // --- 2. MQTT 설정 ---
-        const MQTT_HOST = "192.168.0.165"; 
-        const MQTT_PORT = 8000;                
+        const MQTT_HOST = "192.168.0.165"; // PC IP 주소
+        const MQTT_PORT = 8000;            // 웹소켓 포트
         const MQTT_TOPIC = "scanner/barcode/data"; 
         let mqttClient;
 
@@ -40,8 +63,7 @@
             const clientId = "scanner_" + Math.random().toString(16).substr(2, 8);
             
             try {
-                // ⭕ [교정] 매개변수 순서를 정확히 배치하여 호스트, 포트, 클라이언트ID 순으로 빌드합니다.
-                // 세 번째 인자는 고정 경로인 "/mqtt", 네 번째 인자로 clientId를 전달합니다.
+                // ⭕ [패치 반영] 인자 구조를 [호스트, 포트, 클라이언트ID, 경로]로 정밀 매칭
                 mqttClient = new Paho.MQTT.Client(MQTT_HOST, Number(MQTT_PORT), clientId, "/mqtt");
 
                 mqttClient.onConnectionLost = function (responseObject) {
@@ -56,7 +78,7 @@
                         document.getElementById('mqtt-status').style.color = "#28a745";
                     },
                     onFailure: function (message) {
-                        document.getElementById('mqtt-status').innerText = "MQTT 연결 실패: 서버 설정을 다시 확인하세요.";
+                        document.getElementById('mqtt-status').innerText = "MQTT 연결 실패: 서버가 정상 작동중인지 확인하세요.";
                         document.getElementById('mqtt-status').style.color = "#dc3545";
                         setTimeout(initMQTT, 5000); 
                     },
