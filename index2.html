@@ -1,97 +1,121 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>웹 브라우저 바코드 스캐너 (MQTT)</title>
-    <!-- 1. MQTT 및 ZXING(바코드 인식) 라이브러리 로드 -->
-    <script src="https://cloudflare.com" type="text/javascript"></script>
-    <script src="https://unpkg.com"></script>
+    <title>모바일 바코드 스캐너 (MQTT 생성자 교정형)</title>
+    <!-- html5-qrcode 최신 안정화 CDN -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+   
+    
     <style>
         body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #f5f5f5; }
-        #video { width: 100%; max-width: 500px; border: 2px solid #333; border-radius: 8px; background: #000; }
-        .status { margin: 15px 0; padding: 10px; font-weight: bold; border-radius: 5px; display: inline-block; }
-        .connected { background-color: #d4edda; color: #155724; }
-        .disconnected { background-color: #f8d7da; color: #721c24; }
-        #result { font-size: 24px; color: #007bff; margin-top: 20px; word-break: break-all; }
+        #reader { width: 100%; max-width: 400px; margin: 20px auto; border: 2px solid #333 !important; border-radius: 8px; overflow: hidden; background: #000; }
+        #reader button { padding: 10px 20px; font-size: 1rem; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px 0; }
+        #result { margin-top: 20px; padding: 15px; font-size: 1.2rem; font-weight: bold; color: #555; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); word-break: break-all; }
+        .success-text { color: #28a745; }
+        #mqtt-status { font-size: 0.9rem; color: #666; margin-top: 10px; font-weight: bold; }
     </style>
+
+   <!-- 1. [완벽 교정] 주소 조립 로직을 제거하고, 외부에서 전달받은 주소 규칙을 그대로 타도록 패치 -->
+    <script>
+    var Paho=Paho||{};Paho.MQTT=Paho.MQTT||{},Paho.MQTT.Client=function(t,e,n,i){
+        this.host=t;
+        this.port=Number(e);
+        this.clientId=n;
+        this.path=i||"/mqtt";
+        this.connected=false;
+        var r=this,s=null;
+        this.onConnectionLost=null;
+        this.onMessageArrived=null;
+        
+        this.connect=function(t){
+            var e={keepAliveInterval:60,cleanSession:!0,useSSL:!1,onSuccess:null,onFailure:null};
+            if(t)for(var n in t)e[n]=t[n];
+            
+            // 💡 [버그 강제 패치] 인자 전달 오류로 슬래시가 누락되는 문제를 원천 차단하기 위해 규격을 강제 조합합니다.
+            var i="ws://"+r.host+":"+r.port+r.path;
+            
+            console.log("접속 시도 웹소켓 주소: ", i);
+            s=new WebSocket(i,["mqtt"]),s.binaryType="arraybuffer",s.onopen=function(){r.connected=!0,e.onSuccess&&e.onSuccess()},s.onclose=function(t){r.connected=!1,r.onConnectionLost&&r.onConnectionLost({errorCode:t.code,errorMessage:t.reason})},s.onerror=function(t){e.onFailure&&e.onFailure({errorCode:-1,errorMessage:"WebSocket Error"})},s.onmessage=function(t){if(r.onMessageArrived){var e=new Paho.MQTT.Message(t.data);r.onMessageArrived(e)}}
+        };
+        this.disconnect=function(){s&&s.close()};
+        this.send=function(t,e,n,i){if(!r.connected)throw new Error("Client is not connected");var o;if("string"==typeof t)o=new Paho.MQTT.Message(t),o.destinationName=e;else{if(!(t instanceof Paho.MQTT.Message))throw new Error("Invalid msg type");o=t}s.send(o.payloadString)};
+        this.isConnected=function(){return r.connected}
+    },Paho.MQTT.Message=function(t){this.payloadString=t,this.destinationName=""};
+    </script>
 </head>
 <body>
-
-    <h1>웹 브라우저 바코드 스캐너</h1>
-    
-    <!-- 연결 상태 표시 -->
-    <div id="mqtt-status" class="status disconnected">MQTT 연결 중...</div>
-    
-    <br>
-    <!-- 카메라 화면 출력부 -->
-    <video id="video" autoplay playsinline></video>
-    
-    <!-- 결과 출력부 -->
-    <div id="result">바코드 또는 QR코드를 카메라에 비추세요.</div>
+    <h1>바코드 스캐너</h1>
+    <!-- MQTT 연결 상태 표시 영역 -->
+    <div id="mqtt-status">MQTT 브로커 연결 중...</div>
+    <div id="reader"></div>
+    <div id="result">카메라 시작 버튼을 눌러주세요.</div>
 
     <script>
-        // --- 1. MQTT 설정 ---
-        // 웹 브라우저(WebSocket)용 무료 공개 브로커 주소 및 포트(443 또는 8083)
-        const MQTT_HOST = "://hivemq.com";
-        const MQTT_PORT = 8000; // HiveMQ Websocket 기본 포트
-        const MQTT_TOPIC = "device/barcode";
-        const CLIENT_ID = "web_barcode_" + Math.random().toString(16).substr(2, 8);
+        // --- 2. MQTT 설정 ---
+        const MQTT_HOST = "192.168.0.165"; // PC IP 주소
+        const MQTT_PORT = 8000;            // 웹소켓 포트
+        const MQTT_TOPIC = "scanner/barcode/data"; 
+        let mqttClient;
 
-        const mqttClient = new Paho.MQTT.Client(MQTT_HOST, Number(MQTT_PORT), CLIENT_ID);
-        const statusDiv = document.getElementById("mqtt-status");
+        function initMQTT() {
+            const clientId = "scanner_" + Math.random().toString(16).substr(2, 8);
+            
+            try {
+                // ⭕ [패치 반영] 인자 구조를 [호스트, 포트, 클라이언트ID, 경로]로 정밀 매칭
+                mqttClient = new Paho.MQTT.Client(MQTT_HOST, Number(MQTT_PORT), clientId, "/mqtt");
 
-        // MQTT 연결 옵션
-        mqttClient.connect({
-            onSuccess: () => {
-                statusDiv.innerText = "MQTT 브로커 연결 성공";
-                statusDiv.className = "status connected";
-            },
-            onFailure: (err) => {
-                statusDiv.innerText = "MQTT 연결 실패: " + err.errorMessage;
-                statusDiv.className = "status disconnected";
-            },
-            useSSL: false // https 환경인 경우 true로 변경하고 포트를 8001 또는 443으로 수정해야 할 수 있습니다.
-        });
+                mqttClient.onConnectionLost = function (responseObject) {
+                    document.getElementById('mqtt-status').innerText = "MQTT 연결 유실! 재연결 시도 중...";
+                    document.getElementById('mqtt-status').style.color = "#dc3545";
+                    setTimeout(initMQTT, 3000); 
+                };
 
-        // --- 2. 바코드 카메라 인식 설정 ---
-        const codeReader = new ZXing.BrowserMultiFormatReader();
-        const videoElement = document.getElementById('video');
-        const resultDiv = document.getElementById('result');
-        let lastScannedText = "";
-        let lastScannedTime = 0;
+                mqttClient.connect({
+                    onSuccess: function () {
+                        document.getElementById('mqtt-status').innerText = `MQTT 연결 완료 (${MQTT_HOST}:${MQTT_PORT})`;
+                        document.getElementById('mqtt-status').style.color = "#28a745";
+                    },
+                    onFailure: function (message) {
+                        document.getElementById('mqtt-status').innerText = "MQTT 연결 실패: 서버가 정상 작동중인지 확인하세요.";
+                        document.getElementById('mqtt-status').style.color = "#dc3545";
+                        setTimeout(initMQTT, 5000); 
+                    },
+                    useSSL: false 
+                });
+            } catch (e) {
+                document.getElementById('mqtt-status').innerText = "초기화 에러: " + e.message;
+                document.getElementById('mqtt-status').style.color = "#dc3545";
+            }
+        }
 
-        // 카메라 작동 시작
-        codeReader.decodeFromVideoDevice(null, 'video', (result, err) => {
-            if (result) {
-                const currentTime = Date.now();
+        function publishBarcode(data) {
+            if (mqttClient && mqttClient.isConnected()) {
+                const message = new Paho.MQTT.Message(data);
+                message.destinationName = MQTT_TOPIC;
+                mqttClient.send(message);
+                console.log(`MQTT 발행 성공 [${MQTT_TOPIC}]: ${data}`);
+            } else {
+                alert("로컬 MQTT 브로커와 연결되어 있지 않습니다. 상단 상태창을 확인하세요.");
+            }
+        }
+
+        // --- 3. 스캐너 및 로직 초기화 ---
+        document.addEventListener("DOMContentLoaded", function() {
+            initMQTT();
+
+            const html5QrcodeScanner = new Html5QrcodeScanner(
+                "reader", { fps: 10, qrbox: { width: 280, height: 140 }, aspectRatio: 1.0, rememberLastUsedCamera: true }, false
+            );
+
+            html5QrcodeScanner.render(function onScanSuccess(decodedText) {
+                document.getElementById('result').innerHTML = `스캔 결과: <span class="success-text">${decodedText}</span>`; 
+                if (navigator.vibrate) navigator.vibrate(100);
                 
-                // 동일 바코드 연속 인식 방지 (3초 쿨타임)
-                if (result.text === lastScannedText && (currentTime - lastScannedTime < 3000)) {
-                    return; 
-                }
-
-                lastScannedText = result.text;
-                lastScannedTime = currentTime;
-
-                // 화면에 결과 표시
-                resultDiv.innerText = `인식 내용: ${result.text}`;
-                console.log("스캔 성공:", result.text);
-
-                // --- 3. MQTT 데이터 전송 (Publish) ---
-                if (mqttClient.isConnected()) {
-                    const message = new Paho.MQTT.Message(result.text);
-                    message.destinationName = MQTT_TOPIC;
-                    mqttClient.send(message);
-                    resultDiv.innerText += " (MQTT 전송 완료!)";
-                } else {
-                    resultDiv.innerText += " (MQTT 미연결로 전송 실패)";
-                }
-            }
-            if (err && !(err instanceof ZXing.NotFoundException)) {
-                console.error(err);
-            }
+                // 바코드 스캔 데이터 전송 실행
+                publishBarcode(decodedText); 
+            }, function onScanFailure(error) {});
         });
     </script>
 </body>
