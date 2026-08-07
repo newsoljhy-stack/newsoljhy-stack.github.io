@@ -3,93 +3,117 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>모바일 바코드 스캐너</title>
-    <!-- html5-qrcode 최신 안정화 CDN -->
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <title>모바일 바코드 스캐너 & MQTT 발행</title>
+    <script src="https://unpkg.com"></script>
+    <script src="https://unpkg.com"></script>
     <style>
         body { font-family: sans-serif; text-align: center; margin: 0; padding: 20px; background: #f5f5f5; }
-        
-        /* 스캐너 박스 디자인 커스텀 */
         #reader { width: 100%; max-width: 400px; margin: 20px auto; border: 2px solid #333 !important; border-radius: 8px; overflow: hidden; background: #000; }
-        #reader button { padding: 10px 20px; font-size: 1rem; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 10px 0; }
+        #reader button { padding: 12px 24px; font-size: 1.1rem; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; margin: 15px 0; font-weight: bold; }
         #reader select { padding: 8px; margin: 5px; border-radius: 4px; }
-        
-        /* 결과창 디자인 */
+        .config-box { max-width: 400px; margin: 0 auto 20px auto; padding: 15px; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); text-align: left; }
+        .config-item { margin-bottom: 10px; display: flex; align-items: center; }
+        .config-item label { width: 80px; font-weight: bold; font-size: 0.9rem; }
+        .config-item input { flex: 1; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+        #status-container { text-align: center; margin-bottom: 10px; font-weight: bold; }
         #result { margin-top: 20px; padding: 15px; font-size: 1.2rem; font-weight: bold; color: #555; background: #fff; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); word-break: break-all; }
         .success-text { color: #28a745; }
     </style>
 </head>
 <body>
 
-    <h1>바코드 스캐너</h1>
+    <h1>바코드 MQTT 발행기</h1>
     
-    <!-- 라이브러리가 UI를 직접 제어하는 영역 -->
+    <div class="config-box">
+        <div id="status-container">
+            MQTT 상태: <span id="status" style="color:red;">연결 대기 중...</span>
+        </div>
+        <div class="config-item">
+            <label for="topic">발행 토픽</label>
+            <input id="topic" value="myunique/test/topic">
+        </div>
+    </div>
+    
     <div id="reader"></div>
-    
-    <!-- 스캔 결과만 따로 보여주는 독립된 영역 -->
-    <div id="result">카메라 시작 버튼을 눌러주세요.</div>
+    <div id="result">카메라 권한 허용 후 시작해 주세요.</div>
 
 <script>
-document.addEventListener("DOMContentLoaded", function() {
-    
-    // 반응형 스캔 영역 정의 (화면 너비의 70% 수준으로 직사각형 박스 생성)
-    const qrboxFunction = function(viewfinderWidth, viewfinderHeight) {
-        const minEdgePercentage = 0.7; 
-        const boxWidth = Math.floor(viewfinderWidth * minEdgePercentage);
-        const boxHeight = Math.floor(boxWidth * 0.5); // 2:1 비율의 직사각형
-        return {
-            width: boxWidth,
-            height: boxHeight
-        };
-    }
+let client = null;
 
-    // 스캐너 설정 최적화
+// MQTT 연결을 페이지 로드 시 즉시 실행
+function connectMQTT() {
+    if (client && client.connected) return;
+
+    const brokerUrl = "wss://://hivemq.com";
+    const options = {
+        clientId: "web_bc_" + Math.random().toString(16).substring(2,10),
+        clean: true,
+        reconnectPeriod: 3000,
+        connectTimeout: 5000
+    };
+
+    const statusEl = document.getElementById("status");
+    statusEl.innerText = "연결 중...";
+    statusEl.style.color = "orange";
+
+    client = mqtt.connect(brokerUrl, options);
+
+    client.on("connect", () => {
+        statusEl.innerText = "연결 완료";
+        statusEl.style.color = "green";
+    });
+
+    client.on("error", (err) => {
+        console.error(err);
+        statusEl.innerText = "연결 실패 (네트워크 확인)";
+        statusEl.style.color = "red";
+    });
+
+    client.on("close", () => {
+        statusEl.innerText = "연결 종료";
+        statusEl.style.color = "red";
+    });
+}
+
+function publishMessage(scannedData) {
+    if (!client || !client.connected) {
+        console.warn("MQTT 미연결 상태");
+        return;
+    }
+    const topic = document.getElementById("topic").value;
+    client.publish(topic, scannedData, { qos: 0 });
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    // 1. MQTT 연결 시작
+    connectMQTT();
+
+    // 2. 스캐너 설정
     const html5QrcodeScanner = new Html5QrcodeScanner(
         "reader", 
         { 
-            fps: 15, // 프레임을 15로 약간 상향하여 모바일 추적력 향상
-            qrbox: qrboxFunction, 
-            aspectRatio: 1.333334, // 모바일 후면 카메라 표준 비율 (4:3) 적용
+            fps: 15, 
+            qrbox: function(viewfinderWidth, viewfinderHeight) {
+                const boxWidth = Math.floor(viewfinderWidth * 0.7);
+                return { width: boxWidth, height: Math.floor(boxWidth * 0.5) };
+            }, 
+            aspectRatio: 1.333334,
             rememberLastUsedCamera: true,
-            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
-            
-            // [중요] 지원할 바코드 포맷을 명시하여 알고리즘 연산량 축소 (인식 속도 급상승)
-            formatsToSupport: [ 
-                Html5QrcodeSupportedFormats.EAN_13,
-                Html5QrcodeSupportedFormats.EAN_8,
-                Html5QrcodeSupportedFormats.CODE_128,
-                Html5QrcodeSupportedFormats.CODE_39,
-                Html5QrcodeSupportedFormats.UPC_A,
-                Html5QrcodeSupportedFormats.UPC_E,
-                Html5QrcodeSupportedFormats.QR_CODE // 필요 없다면 제외 가능
-            ]
+            supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
         },
         /* verbose= */ false
     );
 
-    // 스캔 성공 시 콜백 함수
     function onScanSuccess(decodedText, decodedResult) {
-        const resultDiv = document.getElementById('result');
-        resultDiv.innerHTML = `스캔 결과: <span class="success-text">${decodedText}</span>`;
-        
-        // 모바일 진동 피드백
-        if (navigator.vibrate) {
-            navigator.vibrate(100);
-        }
+        document.getElementById('result').innerHTML = `스캔 데이터: <span class="success-text">${decodedText}</span>`;
+        if (navigator.vibrate) navigator.vibrate(100);
+        publishMessage(decodedText);
     }
 
-    // 스캔 실패 시 콜백 함수 (과부하 방지를 위해 비워둠)
-    function onScanFailure(error) {
-        // 무시
-    }
+    function onScanFailure(error) {}
 
-    // 스캐너 렌더링
+    // 3. 스캐너 렌더링
     html5QrcodeScanner.render(onScanSuccess, onScanFailure);
-    
-    setTimeout(() => {
-        const resultDiv = document.getElementById('result');
-        resultDiv.innerText = "상단 스캐너 화면의 안내에 따라주세요.";
-    }, 100);
 });
 </script>
 </body>
