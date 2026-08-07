@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Web MQTT Publisher</title>
     <!-- MQTT.js CDN 라이브러리 로드 -->
-    <script src="https://unpkg.com"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body>
     <h2>Web MQTT Publisher 테스트</h2>
@@ -29,7 +29,7 @@
         function connectMQTT() {
             // Public 테스트 브로커 (Websocket 프로토콜 사용)
             // 주의: 실제 서비스에서는 자체 브로커(HiveMQ, Mosquitto 등) 주소를 사용하세요.
-            const brokerUrl = 'wss://://hivemq.com'; 
+            const brokerUrl = 'wss://://mqttdashboard.com';
             
             const options = {
                 clientId: 'web_mqtt_' + Math.random().toString(16).substr(2, 8),
